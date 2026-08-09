@@ -33,7 +33,7 @@ class PingOverlay:
         self.root.config(bg="black")
         self.root.attributes("-transparentcolor", "black") # Torna o fundo preto transparente
         
-        # Posição inicial na tela (X=20, Y=20) - Altere se quiser mover o padrão
+        # Posição inicial na tela (X=1500, Y=50) - Altere se quiser mover o padrão
         self.root.geometry("+1500+50")
         
         # Texto do Ping (Verde limão para destacar no jogo)
