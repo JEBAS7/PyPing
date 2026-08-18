@@ -1,0 +1,21 @@
+# Pastas de configuração da IDE (PyCharm / VS Code)
+.idea/
+.vscode/
+
+# Ambientes virtuais do Python (caso use)
+.venv/
+venv/
+ENV/
+
+# Arquivos temporários e caches do Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Arquivos de sistema ou ocultos do Windows/Mac
+Thumbs.db
+.DS_Store
+
+# Logs
+*.log

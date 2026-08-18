@@ -10,18 +10,17 @@ INTERVALO_MILISSEGUNDOS = 1000  # O Tkinter trabalha melhor com milissegundos (1
 
 
 def disparar_ping(host, porta):
-    timeout_segundos = 1.5
+    timeout_segundos = 1.0  # Timeout curto para evitar acúmulo de threads
     try:
-        # Usa AF_INET e SOCK_STREAM para testar a porta TCP aberta do servidor
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.settimeout(timeout_segundos)
             antes = time.time()
             s.connect((host, porta))
-            s.sendall(b'\n')
             s.recv(32)  # Baixado para 32 bytes apenas para validar a resposta rápida
             depois = time.time()
             return int((depois - antes) * 1000)
-    except (socket.timeout, socket.error):
+    except Exception:
+        # Captura qualquer erro de rede de forma genérica para não quebrar a thread
         return -1
 
 
@@ -31,11 +30,17 @@ class PingOverlay:
         self.root.title("BDO Ping Overlay")
         self.root.overrideredirect(True)  # Remove bordas da janela
         self.root.attributes("-topmost", True)  # Sempre no topo do jogo
-        self.root.config(bg="black")
-        self.root.attributes("-transparentcolor", "black")  # Fundo preto fica transparente
+
+        # Windows Bugfix: Fundo ligeiramente diferente de puro preto (0,0,0)
+        # para evitar que o Windows ignore cliques ou suma com o widget
+        self.root.config(bg="#010101")
+        self.root.attributes("-transparentcolor", "#010101")
 
         # Posição inicial na tela (X=1500, Y=50)
         self.root.geometry("+1500+50")
+
+        # Controle de concorrência: garante que apenas UMA thread rode por vez
+        self.thread_ativa = False
 
         # Texto do Ping
         self.label = tk.Label(
@@ -43,13 +48,16 @@ class PingOverlay:
             text="BDO Ping: -- ms",
             font=("Consolas", 14, "bold"),
             fg="#00FF00",
-            bg="black"
+            bg="#010101"
         )
         self.label.pack()
 
         # Arrastar a janela com o mouse
         self.label.bind("<Button-1>", self.iniciar_arrasto)
         self.label.bind("<B1-Motion>", self.arrastar_janela)
+
+        # Atalho de teclado de segurança: Pressione ESC para fechar o script
+        # self.root.bind("<Escape>", lambda e: self.root.destroy())
 
         # Inicia o ciclo de atualização seguro
         self.atualizar_ping_seguro()
@@ -66,15 +74,16 @@ class PingOverlay:
         self.root.geometry(f"+{novo_x}+{novo_y}")
 
     def executar_ping_async(self):
-        """Executa o teste de rede em uma Thread isolada para não travar a interface"""
-        tempo = disparar_ping(IP_SERVIDOR_BDO, PORTA_BDO)
-
-        # Agenda a atualização visual na Thread Principal com segurança
-        if self.root.winfo_exists():
-            self.root.after(0, self.atualizar_interface, tempo)
+        """Executa o teste de rede blindado e garante a liberação do estado"""
+        try:
+            tempo = disparar_ping(IP_SERVIDOR_BDO, PORTA_BDO)
+            if self.root.winfo_exists():
+                self.root.after(0, self.atualizar_interface, tempo)
+        finally:
+            # Garante que a flag volte para False mesmo se o código falhar drasticamente
+            self.thread_ativa = False
 
     def atualizar_interface(self, tempo):
-        """Aplica o texto e as cores na interface de maneira limpa"""
         if tempo >= 0:
             texto = f"BDO Ping: {tempo} ms"
             if tempo < 40:
@@ -91,10 +100,11 @@ class PingOverlay:
             self.label.config(text=texto, fg=cor)
 
     def atualizar_ping_seguro(self):
-        """Gerenciador de loop nativo do Tkinter que impede vazamento de memória"""
-        # Cria a thread pontual apenas para o disparo atual
-        t = threading.Thread(target=self.executar_ping_async, daemon=True)
-        t.start()
+        """Gerenciador de loop que impede o acúmulo de threads na memória"""
+        if not self.thread_ativa:
+            self.thread_ativa = True
+            t = threading.Thread(target=self.executar_ping_async, daemon=True)
+            t.start()
 
         # Agenda a próxima execução de forma limpa, liberando a memória da atual
         if self.root.winfo_exists():
